@@ -1,0 +1,9 @@
+(jbuild_version 1)
+
+(library
+ ((name systemfpop)
+  (public_name systemfpop)
+  (libraries (base))
+  (wrapped false)
+ )
+)

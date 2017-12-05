@@ -1,0 +1,19 @@
+opam-version: "1.2"
+name: "systemfpop"
+version: "0.0.1"
+homepage: "https://github.com/ak3n/system-f-pop"
+maintainer: "Eugene Akentev <ak3ntev@gmail.com>"
+authors: [ "Eugene Akentev <ak3ntev@gmail.com>" ]
+license: "MIT"
+build: [
+  ["jbuilder" "build" "-p" name "-j" jobs]
+]
+depends: [
+  "jbuilder" {build & >= "1.0+beta12"}
+  "base" {build & >= "v0.9.4"}
+]
+descr: "
+An implementation of System F^o.
+
+http://www.cis.upenn.edu/~stevez/papers/MZZ10.pdf
+"
