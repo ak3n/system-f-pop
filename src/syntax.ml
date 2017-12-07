@@ -1,22 +1,25 @@
-module Either = Base.Either
+type name =
+  Global of string
+| Local of int
 
 type kind =
   Star
 | Pop
 
 type ty = 
-  TVar of int
+  TVar of name
 | Arrow of ty * kind * ty
-| Forall of int * kind * ty
+| Forall of name * kind * ty
 
-type expr =
-  EVar of int
-| Lam of kind * int * ty * expr
-| App of expr * expr
-| Lambda of int * kind * value
-and value =
-  VLam of kind * int * ty * expr
-| VLambda of int * kind * value
+type iterm =
+  Bound of int
+| Free of name
+| App of iterm * cterm
+and cterm =
+  Inf of iterm
+| Lam of kind * ty * cterm
+| Lambda of kind * cterm
 
-type ctx = (int * (ty, kind) Either.t) list
-type linear_ctx = (int * ty) list
+type info =
+  HasKind of kind
+| HasType of ty
