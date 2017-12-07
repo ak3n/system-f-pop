@@ -9,12 +9,13 @@ type kind =
 type ty = 
   TVar of name
 | Arrow of ty * kind * ty
-| Forall of name * kind * ty
+| Forall of kind * ty
 
 type iterm =
   Bound of int
 | Free of name
 | App of iterm * cterm
+| TApp of iterm * ty
 and cterm =
   Inf of iterm
 | Lam of kind * ty * cterm
