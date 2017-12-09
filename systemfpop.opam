@@ -11,6 +11,7 @@ build: [
 depends: [
   "jbuilder" {build & >= "1.0+beta12"}
   "base" {build & >= "v0.9.4"}
+  "ppx_deriving" {= "4.2"}
 ]
 descr: "
 An implementation of System F^o.

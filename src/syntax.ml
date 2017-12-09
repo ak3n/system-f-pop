@@ -1,26 +1,27 @@
 type name =
-  Global of string
-| Local of int
+  Local of int
+[@@deriving show]
 
 type kind =
   Star
 | Pop
+[@@deriving show]
 
 type ty = 
   TVar of name
-| Arrow of ty * kind * ty
+| Arrow of kind * ty * ty
 | Forall of kind * ty
+[@@deriving show]
 
-type iterm =
-  Bound of int
-| Free of name
-| App of iterm * cterm
-| TApp of iterm * ty
-and cterm =
-  Inf of iterm
-| Lam of kind * ty * cterm
-| Lambda of kind * cterm
+type term =
+  Var of name
+| App of term * term
+| TApp of term * ty
+| Lam of kind * ty * term
+| TLam of kind * term
+[@@deriving show]
 
 type info =
   HasKind of kind
 | HasType of ty
+[@@deriving show]

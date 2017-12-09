@@ -1,17 +1,16 @@
 open Syntax
 
-exception UnknownIdentifier
-exception KindMismatch
-exception TypeMismatch
+exception UnknownTypeIdentifier of string
+exception UnknownIdentifier of string
 exception AlreadyBinded
-exception BadContexts
+exception TypeError of string
 exception IllegalApplication
 exception IllegalTypeApplication
-exception TypeApplicationNotSupportedSubst
 
 type ctx = (name * info) list
 type linear_ctx = (name * ty) list
 type union = linear_ctx * linear_ctx
+type context = ctx * linear_ctx
 
 let add_left (delta1, delta2) item =
   let contains = List.mem item delta1 || List.mem item delta2 in
@@ -23,89 +22,105 @@ let add_right (delta1, delta2) item =
   if contains then raise AlreadyBinded
   else (item :: delta1, delta2)
 
-let rec infer_kind gamma ty =
+let rec infer_kind i gamma ty =
   match ty with
   | TVar name ->
       begin
         match List.assoc_opt name gamma with
         | Some (HasKind kind) -> kind
-        | _ -> raise UnknownIdentifier
+        | _ -> raise (UnknownTypeIdentifier ([%derive.show: name] name))
       end
-  | Arrow (_, kind, _) -> kind
-  | Forall (_, ty) -> infer_kind gamma ty
+  | Arrow (kind, t1, t2) ->
+     let _ = infer_kind i gamma t1 in
+     let _ = infer_kind i gamma t2 in
+     kind
+  | Forall (k, ty) -> infer_kind (i + 1) ((Local i, HasKind k) :: gamma) ty
 
-let check_kind gamma ty kind =
-  if infer_kind gamma ty = kind then ()
-  else raise KindMismatch
+let check_kind i gamma ty kind =
+  if infer_kind i gamma ty = kind then ()
+  else raise (TypeError "Kinds mismatch")
 
 let rec tsubst alpha ty ty' =
   match ty' with
   | TVar n -> if n = alpha then ty else (TVar n)
-  | Arrow (t1, kind, t2) -> Arrow (tsubst alpha ty t1, kind, tsubst alpha ty t2)
+  | Arrow (kind, t1, t2) -> Arrow (kind, tsubst alpha ty t1, tsubst alpha ty t2)
   | Forall (kind, ty') -> Forall (kind, tsubst alpha ty ty')
 
-let rec isubst i r iterm =
-  match iterm with
-  | Bound j -> if i = j then r else (Bound j)
-  | Free n -> Free n
-  | App (t1, t2) -> App (isubst i r t1, csubst i r t2)
-  | _ -> raise TypeApplicationNotSupportedSubst
-and csubst i r cterm =
-  match cterm with
-  | Inf t -> Inf (isubst i r t)
-  | Lam (k, ty, t) -> Lam (k, ty, csubst (i + 1) r t)
-  | Lambda (k, t) -> Lambda (k, csubst (i + 1) r t)
+let rec subst i r term =
+  match term with
+  | Var (Local j) -> if i = j then r else Var (Local j)
+  | App (t1, t2) -> App (subst i r t1, subst i r t2)
+  | Lam (k, ty, t) -> Lam (k, ty, subst (i + 1) r t)
+  | TLam (k, t) -> TLam (k, subst (i + 1) r t)
 
-let rec infer_type i (gamma : ctx) iterm =
-  match iterm with
-  | Free n ->
+let rec infer_type i (gamma, delta) term =
+  let context = (gamma, delta) in
+  match term with
+  | Var n ->
      begin
        match List.assoc_opt n gamma with
-       | Some (HasType ty) -> Some ty
-       | _ -> None
+       | Some (HasType ty) ->
+          (* T-UVar *)
+          if delta = [] then (ty, context)
+          else raise (TypeError "Linear context is non-empty with unrestricted variable")
+       | _ ->
+          begin
+            match List.assoc_opt n delta with
+            | Some ty ->
+               (* T-LVar *)
+               let newdelta = List.remove_assoc n delta in
+               (ty, (gamma, newdelta))
+            | _ -> raise (UnknownIdentifier ([%derive.show: name] n))
+          end
      end
-  | App (t1, t2) ->
+  | App (e1, e2) ->
+     let (ty, (g, d)) = infer_type i context e1 in
+     let (ty', (g', d')) = infer_type i (g, d) e2 in
+     if g' = [] then
+       begin
+         match ty with
+         | Arrow(kind, t1, t2) when t1 == ty' -> (t2, (g', d'))
+         | _ -> raise IllegalApplication
+       end
+     else raise (TypeError "Unused linear variables in the argument")
+  | Lam (kind, ty, term) ->
+     if delta = [] || kind = Pop then
+       let ty_kind = infer_kind (i + 1) gamma ty in
+       match List.assoc_opt (Local i) gamma, List.assoc_opt (Local i) delta with
+       | None, None ->
+          let (g, d) = match ty_kind with
+              Star -> (((Local i, HasType ty) :: gamma), delta)
+            | Pop -> (gamma, ((Local i, ty) :: delta))
+          in
+          let (ty', _) = infer_type (i + 1) (g, d) (subst 0 (Var (Local i)) term) in
+          (Arrow (kind, ty, ty'), context)
+       | Some _, _ -> raise (TypeError "Term is already in unrestricted context")
+       | _, Some _ -> raise (TypeError "Term is already in linear context")
+     else raise (TypeError "Linear context is non-empty with unrestricted lambda")
+  | TApp (e, ty) ->
+     let kind = infer_kind 0 gamma ty in
+     let (ety, newcontext) = infer_type i context e in
      begin
-       match infer_type i gamma t1 with
-       | Some (Arrow (ty, kind, ty')) ->
-          check_type i gamma [] t2 ty;
-          Some ty'
-       | _ -> raise IllegalApplication
+       match ety with
+       | Forall (kind', ty') ->
+          if kind = kind' then (tsubst (Local i) ty ty', newcontext)
+          else raise (TypeError "Kinds mismatch")
+       | _ -> raise (TypeError "Type application has a bad type")
      end
-  | TApp (t, ty) ->
-     begin
-       match infer_type i gamma t with
-       | Some (Forall (kind, ty')) ->
-          let kind = infer_kind gamma ty in
-          let kind' = infer_kind gamma ty' in
-          if kind = kind' then
-            Some (tsubst (Local i) ty ty')
-          else raise KindMismatch
-       | _ -> raise IllegalTypeApplication
-     end
-  | _ -> None
+  | TLam (kind, term) ->
+     match List.assoc_opt (Local i) gamma with
+     | Some (HasKind kind') -> raise (TypeError "Variable already has kind")
+     | _ ->
+        begin
+          let newcontext = (((Local i), HasKind kind) :: gamma, delta) in
+          let (ty, (g, d)) = infer_type (i + 1) newcontext (subst 0 (TVar (Local i)) term) in
+          (Forall (kind, ty), context)
+        end
+     
+and check_type i context term ty =
+  match infer_type i context term with
+  | (ty', _) when ty' = ty -> ()
+  | _ -> raise (TypeError "Types mismatch")
 
-and check_type i (gamma : ctx) (delta : linear_ctx) cterm ty =
-  match cterm, ty with
-  | Inf t, ty ->
-     begin
-       match infer_type 0 gamma t with
-       | Some inferred when inferred = ty -> ()
-       | _ -> raise TypeMismatch
-     end
-  | Lam (kind, ty, term), Arrow (t, kind', t') ->
-     if kind = kind' then
-       let (g, d) = match kind with
-           Star when delta = [] -> (((Local i, HasType ty) :: gamma), delta)
-         | Pop -> (gamma, ((Local i, ty) :: delta))
-         | _ -> raise BadContexts
-       in
-       check_type (i + 1) g d (csubst 0 (Free (Local i)) term) t'
-     else raise KindMismatch
-  | Lambda (kind, term), Forall (kind', ty) ->
-     let alpha = (Local i, HasType ty) in
-     if kind = kind' && not(List.mem alpha gamma) then
-         check_type (i + 1) (alpha :: gamma) delta term ty
-     else raise KindMismatch
-  | _, _ -> raise TypeMismatch
-
+let infer = infer_type 0 ([], [])
+let check = check_type 0 ([], [])

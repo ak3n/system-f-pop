@@ -1,0 +1,7 @@
+(executables
+ ((names (simple))
+  (libraries (systemfpop))
+  (preprocess (pps (ppx_deriving.std)))
+))
+
+(jbuild_version 1)
