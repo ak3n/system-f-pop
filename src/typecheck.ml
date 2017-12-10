@@ -2,25 +2,12 @@ open Syntax
 
 exception UnknownTypeIdentifier of string
 exception UnknownIdentifier of string
-exception AlreadyBinded
 exception TypeError of string
-exception IllegalApplication
-exception IllegalTypeApplication
 
 type ctx = (name * info) list
 type linear_ctx = (name * ty) list
 type union = linear_ctx * linear_ctx
 type context = ctx * linear_ctx
-
-let add_left (delta1, delta2) item =
-  let contains = List.mem item delta1 || List.mem item delta2 in
-  if contains then raise AlreadyBinded
-  else (delta1, item :: delta2)
-
-let add_right (delta1, delta2) item =
-  let contains = List.mem item delta1 || List.mem item delta2 in
-  if contains then raise AlreadyBinded
-  else (item :: delta1, delta2)
 
 let rec infer_kind i gamma ty =
   match ty with
@@ -88,7 +75,7 @@ let rec infer_type i (gamma, delta) term =
        begin
          match ty with
          | Arrow(kind, t1, t2) when t1 == ty' -> (t2, (g', d'))
-         | _ -> raise IllegalApplication
+         | _ -> raise (TypeError "Illegal application")
        end
      else raise (TypeError "Unused linear variables in the argument")
   | Lam (kind, ty, term) ->
