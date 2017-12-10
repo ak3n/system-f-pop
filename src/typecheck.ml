@@ -93,20 +93,24 @@ let rec infer_type i (gamma, delta) term =
      else raise (TypeError "Unused linear variables in the argument")
   | Lam (kind, ty, term) ->
      if delta = [] || kind = Pop then
-       let ty_kind = infer_kind (i + 1) gamma ty in
+       let ty_kind = infer_kind i gamma ty in
        match List.assoc_opt (Local i) gamma, List.assoc_opt (Local i) delta with
-       | None, None ->
+       | Some (HasType _), _ -> raise (TypeError "Term is already in unrestricted context")
+       | _, Some _ -> raise (TypeError "Term is already in linear context")
+       | _, _ ->
           let (g, d) = match ty_kind with
               Star -> (((Local i, HasType ty) :: gamma), delta)
             | Pop -> (gamma, ((Local i, ty) :: delta))
           in
-          let (ty', _) = infer_type (i + 1) (g, d) (subst 0 (Var (Local i)) term) in
-          (Arrow (kind, ty, ty'), context)
-       | Some _, _ -> raise (TypeError "Term is already in unrestricted context")
-       | _, Some _ -> raise (TypeError "Term is already in linear context")
+          let (ty', (g', d')) = infer_type (i + 1) (g, d) (subst 0 (Var (Local i)) term) in
+          let (newg, newd) = match ty_kind with
+              Star -> (List.filter (fun x -> x != (Local i, HasType ty)) g', d')
+            | Pop -> (g', List.filter (fun x -> x != (Local i, ty)) d')
+          in
+          (Arrow (kind, ty, ty'), (newg, newd))
      else raise (TypeError "Linear context is non-empty with unrestricted lambda")
   | TApp (e, ty) ->
-     let kind = infer_kind 0 gamma ty in
+     let kind = infer_kind i gamma ty in
      let (ety, newcontext) = infer_type i context e in
      begin
        match ety with
@@ -120,9 +124,11 @@ let rec infer_type i (gamma, delta) term =
      | Some (HasKind kind') -> raise (TypeError "Variable already has kind")
      | _ ->
         begin
-          let newcontext = (((Local i), HasKind kind) :: gamma, delta) in
+          let alpha = ((Local i), HasKind kind) in
+          let newcontext = (alpha :: gamma, delta) in
           let (ty, (g, d)) = infer_type (i + 1) newcontext (tysubst 0 (TVar (Local i)) term) in
-          (Forall (kind, ty), context)
+          let newg = List.filter (fun x -> x != alpha) g in
+          (Forall (kind, ty), (newg, d))
         end
      
 and check_type i context term ty =

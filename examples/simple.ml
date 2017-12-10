@@ -34,6 +34,9 @@ let _ =
                                           Var (Local 0)),
                                      Var (Local 0)))))
     in
-    let (ty, _) = infer term in
-    printf "%s\n" ([%derive.show: ty] ty)
+    try
+      let (ty, _) = infer term in
+      printf "%s\n" ([%derive.show: ty] ty)
+    with
+      TypeError m -> printf "%s\n" m
   end
