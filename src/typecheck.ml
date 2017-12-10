@@ -46,6 +46,14 @@ let rec tsubst alpha ty ty' =
   | Arrow (kind, t1, t2) -> Arrow (kind, tsubst alpha ty t1, tsubst alpha ty t2)
   | Forall (kind, ty') -> Forall (kind, tsubst alpha ty ty')
 
+let rec tysubst i ty term =
+  match term with
+  | App (t1, t2) -> App (tysubst i ty t1, tysubst i ty t2)
+  | Lam (k, ty', t) -> Lam (k, tsubst (Local i) ty ty', tysubst (i + 1) ty t)
+  | TLam (k, t) -> TLam (k, tysubst (i + 1) ty t)
+  | TApp (e, t) -> TApp (tysubst i ty e, tsubst (Local i) ty t)
+  | t -> t
+
 let rec subst i r term =
   match term with
   | Var (Local j) -> if i = j then r else Var (Local j)
@@ -113,7 +121,7 @@ let rec infer_type i (gamma, delta) term =
      | _ ->
         begin
           let newcontext = (((Local i), HasKind kind) :: gamma, delta) in
-          let (ty, (g, d)) = infer_type (i + 1) newcontext (subst 0 (TVar (Local i)) term) in
+          let (ty, (g, d)) = infer_type (i + 1) newcontext (tysubst 0 (TVar (Local i)) term) in
           (Forall (kind, ty), context)
         end
      
