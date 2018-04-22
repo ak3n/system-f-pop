@@ -4,7 +4,7 @@
  ((name systemfpop)
   (public_name systemfpop)
   (libraries (base))
-  (preprocess (pps (ppx_deriving.std)))
+  (preprocess (pps (ppx_deriving.std ppx_jane)))
   (wrapped false)
  )
 )

@@ -12,9 +12,8 @@ depends: [
   "jbuilder" {build & >= "1.0+beta12"}
   "base" {build & >= "v0.9.4"}
   "ppx_deriving" {= "4.2"}
+  "ppx_jane" {= "v0.10.0"}
 ]
-descr: "
-An implementation of System F^o.
+descr: "An implementation of System F^o.
 
-http://www.cis.upenn.edu/~stevez/papers/MZZ10.pdf
-"
+http://www.cis.upenn.edu/~stevez/papers/MZZ10.pdf"
